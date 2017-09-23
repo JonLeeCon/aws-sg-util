@@ -1,0 +1,11 @@
+[package]
+name = "aws-sg-util"
+version = "0.1.0"
+authors = ["Jonathan Constantinides <jonleecon@gmail.com>"]
+
+[dependencies]
+error-chain = "0.11.0"
+csv = "0.15.0"
+
+[profile.release]
+lto = true
