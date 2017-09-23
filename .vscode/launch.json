@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceRoot}/target/debug/aws-sg-util",
+      "args": [
+        "README.md"
+      ],
+      "cwd": "${workspaceRoot}",
+      "sourceLanguages": [
+        "rust"
+      ]
+    }
+  ]
+}
