@@ -1,0 +1,4 @@
+name, protocol, port
+vpn, tcp, 1194
+vpn, tcp, 53
+ssh, tcp, 22
