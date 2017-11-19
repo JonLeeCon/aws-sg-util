@@ -1,5 +1,7 @@
 #![recursion_limit = "1024"]
 
+/* === CRATES === */
+
 #[macro_use]
 extern crate error_chain;
 extern crate rusoto_core;
@@ -8,38 +10,57 @@ extern crate trust_dns;
 extern crate csv;
 extern crate clap;
 
-/* MODULES */
+/* === MODs === */
+
 mod errors {
-    error_chain!{}
+    error_chain! {
+        foreign_links {
+            Io(::std::io::Error);
+            TlsError(::rusoto_core::TlsError);
+            CredentialError(::rusoto_core::CredentialsError);
+            CSVError(::csv::Error);
+            AuthorizeSecurityGroupIngressError(::rusoto_ec2::AuthorizeSecurityGroupIngressError);
+            RevokeSecurityGroupIngressError(::rusoto_ec2::RevokeSecurityGroupIngressError);
+            DescribeSecurityGroupsError(::rusoto_ec2::DescribeSecurityGroupsError);
+        }
+    }
 }
 
-/* USE */
+/* === USE === */
+
 use std::collections::HashMap;
-// use std::fmt;
-// use std::net::Ipv4Addr;
+use std::fmt;
 use std::str::FromStr;
-
 use errors::*;
-
 use rusoto_core::{DefaultCredentialsProvider, Region, default_tls_client};
-use rusoto_ec2::{Ec2Client, Ec2, DescribeSecurityGroupsRequest, AuthorizeSecurityGroupIngressRequest, RevokeSecurityGroupIngressRequest, SecurityGroup};
-// use rusoto_ec2::{UserIdGroupPair};
+use rusoto_ec2::{Ec2Client, Ec2, DescribeSecurityGroupsRequest,
+                 AuthorizeSecurityGroupIngressRequest, RevokeSecurityGroupIngressRequest,
+                 SecurityGroup};
+use rusoto_ec2::{UserIdGroupPair, IpPermission};
 use trust_dns::client::{Client, SyncClient};
 use trust_dns::udp::UdpClientConnection;
 use trust_dns::op::Message;
 use trust_dns::rr::{DNSClass, Name, RData, RecordType};
-use clap::{App, Arg /*, SubCommand */};
+use clap::{App, Arg};
 
-/* CONSTANTS */
+/* === CONSTANTS === */
+
 const OPEN_DNS_ADDRESS: &'static str = "208.67.222.222:53";
 const FILE_NAME: &'static str = "./config/ports.csv";
 
-/* STRUCTS */
+/* === STRUCTS === */
+
+/// Struct containing port number and protocol
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct Port {
     protocol: String,
     port: i64,
 }
+
+/// Wrapper struct for printing
+struct PUserIdGroupPair(UserIdGroupPair);
+
+/* === IMPLEMENTS === */
 
 impl Port {
     fn new(protocol: String, port: i64) -> Port {
@@ -50,15 +71,11 @@ impl Port {
     }
 }
 
-// impl Into<PUserIdGroupPair> for UserIdGroupPair {
-//   fn into(self) -> PUserIdGroupPair {
-//     PUserIdGroupPair(self)
-//   }
-// }
-
-/*
-struct PVec<T>(Vec<T>);
-struct PUserIdGroupPair(UserIdGroupPair);
+impl Into<PUserIdGroupPair> for UserIdGroupPair {
+    fn into(self) -> PUserIdGroupPair {
+        PUserIdGroupPair(self)
+    }
+}
 
 impl fmt::Display for PUserIdGroupPair {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -74,57 +91,47 @@ impl fmt::Display for PUserIdGroupPair {
     }
 }
 
-impl<T> fmt::Display for PVec<T>
-where
-    T: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut print_separated = String::new();
+/* === FUNCTIONS ===*/
 
-        for num in &self.0[0..self.0.len() - 1] {
-            print_separated.push_str(&num.to_string());
-            print_separated.push_str("\n");
-        }
-        print_separated.push_str(&self.0[self.0.len() - 1].to_string());
-        write!(f, "{}", print_separated)
-    }
-}
-*/
-
-/* FUNCTIONS */
-/*
-fn print_definitions(rules: &HashMap<String, Vec<Port>>) {
-    for (name, port) in rules {
-        println!("{}: {:?}", name, port);
-    }
-}
-*/
-
-fn print_security_group(sg: SecurityGroup) {
+/// Prints a security-group for a list view format
+fn print_security_group_list(sg: SecurityGroup) {
     if let Some(id) = sg.group_id {
-        println!("Id: {}", id)
+        print!("{}\t", id)
     };
     if let Some(name) = sg.group_name {
-        println!("Name: {}", name)
-    };
-    if let Some(description) = sg.description {
-        println!("Description: {}", description)
+        print!("{}\t", name)
     };
     println!("");
-    /*
+}
+
+/// Prints a security-group for a detailed view format
+fn print_security_group_detail(sg: SecurityGroup) {
+    if let Some(id) = sg.group_id {
+        print!("{}", id)
+    };
+    if let Some(name) = sg.group_name {
+        println!("-{}", name)
+    };
+    if let Some(description) = sg.description {
+        println!("{}", description)
+    };
+    println!("");
     let print_ip = |ip_input: Option<Vec<IpPermission>>| if let Some(ip_permissions) = ip_input {
-        println!("Ingress Rules:");
         for rule in ip_permissions {
-            if let Some(ip_protocol) = rule.ip_protocol {
-                print!("{} ", ip_protocol)
-            };
-            if let Some(from_port) = rule.from_port {
-                print!("{}", from_port)
-            };
-            print!("->");
-            if let Some(to_port) = rule.to_port {
-                print!("{}", to_port)
-            };
+            let ip_protocol = rule.ip_protocol.unwrap();
+            if ip_protocol == "-1" {
+                print!("tcp/udp *");
+            } else {
+                print!("{} ", ip_protocol);
+
+                if let Some(from_port) = rule.from_port {
+                    print!("{}", from_port)
+                };
+                print!("->");
+                if let Some(to_port) = rule.to_port {
+                    print!("{}", to_port)
+                };
+            }
             println!();
             if let Some(ip_ranges) = rule.ip_ranges {
                 for range in ip_ranges {
@@ -141,11 +148,17 @@ fn print_security_group(sg: SecurityGroup) {
             println!();
         }
     };
+
+    println!("Ingress Rules");
+    println!("--------------------");
     print_ip(sg.ip_permissions);
+
+    println!("Egress Rules");
+    println!("--------------------");
     print_ip(sg.ip_permissions_egress);
-    */
 }
 
+/// Main function for error handling
 fn main() {
     if let Err(ref e) = run() {
         use std::io::Write;
@@ -166,51 +179,61 @@ fn main() {
     }
 }
 
+/// Bulk of the execution
 fn run() -> Result<()> {
-    // Init
+    // Init command line arguments
     let matches = App::new("aws-sg-util")
         .version("1.0")
-        .about(
-            "Simple utility to help add and remove permissions quickly from AWS security groups",
-        )
+        .about("Simple utility to help list, add, and remove permissions quickly from AWS security groups")
         .author("Jonathan Constantinides <jonleecon@gmail.com>")
-        .arg(Arg::with_name("list").short("l").long("list").help(
-            "List information",
-        ))
+        .arg(
+            Arg::with_name("list")
+                .short("l")
+                .long("list")
+                .help("List information")
+        )
         .arg(
             Arg::with_name("security-group")
                 .long("sg")
                 .value_name("SECURITY_GROUP")
-                .help("Set specific security group"),
+                .help("Set specific security group")
         )
         .arg(
             Arg::with_name("add")
                 .short("a")
                 .long("add")
                 .value_name("DEFINED_SERVICE")
-                .help("Add service"),
+                .help("Add service")
         )
         .arg(
             Arg::with_name("remove")
                 .short("r")
                 .long("remove")
                 .value_name("DEFINED_SERVICE")
-                .help("Remove service"),
+                .help("Remove service")
         )
         .get_matches();
 
-    let get_rules = || {
-        let mut rules = HashMap::new();
-        // let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
-        let mut rdr = csv::Reader::from_file(FILE_NAME).unwrap();
+    // Init EC2 client for AWS requests
+    let client = Ec2Client::new(
+        default_tls_client()?,
+        DefaultCredentialsProvider::new()?,
+        Region::UsWest2,
+    );
+
+    // Get service to port + protocol mapping from config file
+    let get_rules = || -> Result<(HashMap<String, Vec<Port>>)> {
+        let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
+        let mut rdr = csv::Reader::from_file(FILE_NAME)?;
         for record in rdr.decode() {
-            let (name, protocol, port): (String, String, i64) = record.unwrap();
+            let (name, protocol, port): (String, String, i64) = record?;
             let entry_vector = rules.entry(name).or_insert(Vec::new());
             entry_vector.push(Port::new(protocol, port));
         }
-        rules
+        Ok(rules)
     };
 
+    // Make DNS request to opendns for current external ip
     let get_external_ip = || {
         let name = Name::from_str("myip.opendns.com.").unwrap();
         let client = SyncClient::new(
@@ -224,54 +247,32 @@ fn run() -> Result<()> {
             for i in &ip.octets() {
                 final_str.push_str(&i.to_string());
                 if octet_number != 4 {
-                  final_str.push_str(".");
+                    final_str.push_str(".");
                 }
                 octet_number = octet_number + 1;
             }
-            Some(final_str)
+            Ok(final_str)
+        } else {
+            Err("Unable to get external ip from dns request")
         }
-        else { None }
     };
-    // print_definitions(&rules);
 
-    let client = Ec2Client::new(
-        default_tls_client().unwrap(),
-        DefaultCredentialsProvider::new().unwrap(),
-        Region::UsWest2,
-    );
-
+    // Closure to print security groups
     let print_securitygroups = || {
-        let describe_security_group_request: DescribeSecurityGroupsRequest = Default::default();
-        let output = client
-            .describe_security_groups(&describe_security_group_request)
-            .unwrap();
+        let output = 
+        client.describe_security_groups(&Default::default()).unwrap();
+        
         if let Some(security_groups) = output.security_groups {
-            println!("Security Groups:");
+            println!("Name\t\tId");
+            println!("-----------------------------------------");
 
             for security_group in security_groups {
-                print_security_group(security_group);
-                /*
-          match security_group {
-            SecurityGroup { 
-              ref group_name,
-              group_id: Some(ref id),
-              ..
-            } => {
-              if let Some(ref name) = *group_name {
-                println!("{} {}", id, name);
-              }
-              else {
-                println!("{}", id);
-              }
-            }
-            _ => {}
-          }
-          */
+                print_security_group_list(security_group);
             }
         }
     };
 
-    // List Action
+    // List
     if matches.is_present("list") {
         if let Some(sg) = matches.value_of("security-group") {
             let describe_security_group_request = DescribeSecurityGroupsRequest {
@@ -280,19 +281,18 @@ fn run() -> Result<()> {
             };
 
             let security_groups = client
-                .describe_security_groups(&describe_security_group_request)
-                .unwrap()
-                .security_groups
-                .unwrap();
+                .describe_security_groups(&describe_security_group_request)?
+                .security_groups.unwrap();
 
             for security_group in security_groups {
-                print_security_group(security_group);
+                print_security_group_detail(security_group);
             }
         } else {
             print_securitygroups();
         }
     }
-    // Add action
+
+    // Add
     else if matches.is_present("add") {
         // Missing add argument
         if !matches.is_present("add") {
@@ -307,32 +307,41 @@ fn run() -> Result<()> {
             bail!("Cannot add and remove together");
         }
 
-        let sg = matches.value_of("security-group").unwrap();
-        let service = matches.value_of("add").unwrap().to_string();
-        let services: HashMap<String, Vec<Port>> = get_rules();
+        let add_security_group = matches.value_of("security-group").unwrap();
+        let add_service = matches.value_of("add").unwrap().to_string();
+        let all_services: HashMap<String, Vec<Port>> = match get_rules() {
+            Ok(res) => res,
+            Err(err) => bail!("Error obtaining services from csv file: {}", err)
+        };
 
-        let ports = services.get(&service).unwrap();
-        let my_ip = get_external_ip().unwrap();
+        let add_ports = match all_services.get(&add_service) {
+            Some(add_ports) => add_ports,
+            _ => bail!("Service ports defitions were not found")
+        };
+        let external_ip = get_external_ip()?;
 
-        for port in ports.into_iter() {
-          let set_protocol = port.protocol.clone();
-          let set_port = port.port;
-          client
-            .authorize_security_group_ingress(
-              &AuthorizeSecurityGroupIngressRequest {
-                cidr_ip: Some(my_ip.clone() + "/32"),
-                group_id: Some(sg.to_string()),
-                from_port: Some(set_port),
-                to_port: Some(set_port),
-                ip_protocol: Some(set_protocol),
-                ..Default::default()
-              }
-            )
-            .unwrap();
+        for port in add_ports.into_iter() {
+            let set_protocol = port.protocol.clone();
+            let set_port = port.port;
+            client
+                .authorize_security_group_ingress(&AuthorizeSecurityGroupIngressRequest {
+                    cidr_ip: Some(external_ip.clone() + "/32"),
+                    group_id: Some(add_security_group.to_string()),
+                    from_port: Some(set_port),
+                    to_port: Some(set_port),
+                    ip_protocol: Some(set_protocol),
+                    ..Default::default()
+                })
+                .chain_err(|| { "Could not add port" })?;
         }
-        println!("Added service:{:?} to security-group:{:?} successfully", service, sg);
+        println!(
+            "Added service:{:?} to security-group:{:?} successfully",
+            add_service,
+            add_security_group
+        );
     }
-    // Remove action
+
+    // Remove
     else if matches.is_present("remove") {
         // Missing add argument
         if !matches.is_present("remove") {
@@ -343,30 +352,38 @@ fn run() -> Result<()> {
             bail!("Missing required security-group when removing rule");
         }
 
-        let sg = matches.value_of("security-group").unwrap();
-        let service = matches.value_of("remove").unwrap().to_string();
-        let services: HashMap<String, Vec<Port>> = get_rules();
+        let remove_security_group = matches.value_of("security-group").unwrap();
+        let remove_service = matches.value_of("remove").unwrap().to_string();
+        let all_services: HashMap<String, Vec<Port>> = match get_rules() {
+            Ok(res) => res,
+            Err(err) => bail!("Error obtaining services from csv file: {}", err)
+        };
 
-        let ports = services.get(&service).unwrap();
-        let my_ip = get_external_ip().unwrap();
+        let remove_ports = match all_services.get(&remove_service) {
+            Some(remove_ports) => remove_ports,
+            _ => bail!("Service ports defitions were not found")
+        };
+        let external_ip = get_external_ip()?;
 
-        for port in ports.into_iter() {
-          let set_protocol = port.protocol.clone();
-          let set_port = port.port;
-          client
-            .revoke_security_group_ingress(
-              &RevokeSecurityGroupIngressRequest {
-                cidr_ip: Some(my_ip.clone() + "/32"),
-                group_id: Some(sg.to_string()),
-                from_port: Some(set_port),
-                to_port: Some(set_port),
-                ip_protocol: Some(set_protocol),
-                ..Default::default()
-              }
-            )
-            .unwrap();
+        for port in remove_ports.into_iter() {
+            let set_protocol = port.protocol.clone();
+            let set_port = port.port;
+            client
+                .revoke_security_group_ingress(&RevokeSecurityGroupIngressRequest {
+                    cidr_ip: Some(external_ip.clone() + "/32"),
+                    group_id: Some(remove_security_group.to_string()),
+                    from_port: Some(set_port),
+                    to_port: Some(set_port),
+                    ip_protocol: Some(set_protocol),
+                    ..Default::default()
+                })
+                .chain_err(|| { "Could not remove port" })?;;
         }
-        println!("Removed service:{:?} to security-group:{:?} successfully", service, sg);
+        println!(
+            "Removed service:{:?} to security-group:{:?} successfully",
+            remove_service,
+            remove_security_group
+        );
     }
 
     Ok(())
