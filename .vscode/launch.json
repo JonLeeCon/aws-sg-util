@@ -9,8 +9,10 @@
       "args": [
         // "-h"
         // "-l"
-        "-a", "https", "--sg", "sg-1841817e"
-        // "-r", "https", "--sg", "sg-1841817e"
+        // "-l", "--sg", "XXX"
+        // "-a", "https", "--sg", "XXX"
+        // "-a", "https"
+        "-r", "https", "--sg", "XXX"
       ],
       "cwd": "${workspaceRoot}",
       "sourceLanguages": ["rust"]

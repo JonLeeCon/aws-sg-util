@@ -1,4 +1,5 @@
 {
+  "editor.tabSize": 4,
   "rust.unstable_features": true,
   "rust.workspace_mode": true,
   "rust.goto_def_racer_fallback": false
