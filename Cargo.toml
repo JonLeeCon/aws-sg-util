@@ -10,6 +10,7 @@ rusoto_ec2 = "0.28.0"
 error-chain = "0.11.0"
 csv = "0.15.0"
 trust-dns = "0.11.3"
+process_path = "0.1"
 
 [profile.release]
 lto = true

@@ -9,6 +9,7 @@ extern crate rusoto_ec2;
 extern crate trust_dns;
 extern crate csv;
 extern crate clap;
+extern crate process_path;
 
 /* === MODs === */
 
@@ -28,6 +29,7 @@ mod errors {
 
 /* === USE === */
 
+use process_path::get_executable_path;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
@@ -35,8 +37,7 @@ use errors::*;
 use rusoto_core::{DefaultCredentialsProvider, Region, default_tls_client};
 use rusoto_ec2::{Ec2Client, Ec2, DescribeSecurityGroupsRequest,
                  AuthorizeSecurityGroupIngressRequest, RevokeSecurityGroupIngressRequest,
-                 SecurityGroup};
-use rusoto_ec2::{UserIdGroupPair, IpPermission};
+                 SecurityGroup, UserIdGroupPair, IpPermission};
 use trust_dns::client::{Client, SyncClient};
 use trust_dns::udp::UdpClientConnection;
 use trust_dns::op::Message;
@@ -46,7 +47,7 @@ use clap::{App, Arg};
 /* === CONSTANTS === */
 
 const OPEN_DNS_ADDRESS: &'static str = "208.67.222.222:53";
-const FILE_NAME: &'static str = "./config/ports.csv";
+const FILE_NAME: &'static str = "config/ports.csv";
 
 /* === STRUCTS === */
 
@@ -223,8 +224,12 @@ fn run() -> Result<()> {
 
     // Get service to port + protocol mapping from config file
     let get_rules = || -> Result<(HashMap<String, Vec<Port>>)> {
+        let mut get_exec_path = get_executable_path().unwrap();
+        get_exec_path.pop();
+        get_exec_path.push(FILE_NAME);
+
         let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
-        let mut rdr = csv::Reader::from_file(FILE_NAME)?;
+        let mut rdr = csv::Reader::from_file(get_exec_path)?;
         for record in rdr.decode() {
             let (name, protocol, port): (String, String, i64) = record?;
             let entry_vector = rules.entry(name).or_insert(Vec::new());
