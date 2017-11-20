@@ -16,9 +16,15 @@ OPTIONS:
     -r, --remove <DEFINED_SERVICE>    Remove service
         --sg <SECURITY_GROUP>         Set specific security group
 ```
+## Getting Started
+### Prerequisites
+- A Cargo/Rust setup for compiling
+- AWS CLI installed
 
-## Prerequisites
-A Cargo/Rust setup for compiling
+### Setting Up
+- Create folder called *config* in the same location as the final compiled binary
+- Create a *ports.csv* with (include header) name, protocol, port in the newly created config folder
+- Add any services(anything you want to use) and protocol(tcp/udp) + port combinations
 
 ## Authors
 Jonathan Constantinides <jonleecon@gmail.com>
