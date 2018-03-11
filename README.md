@@ -13,6 +13,7 @@ FLAGS:
 
 OPTIONS:
     -a, --add <DEFINED_SERVICE>       Add service
+        --ip <IP_ADDRESS>             Set specific ip address
     -r, --remove <DEFINED_SERVICE>    Remove service
         --sg <SECURITY_GROUP>         Set specific security group
 ```
