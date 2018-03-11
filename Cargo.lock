@@ -49,6 +49,7 @@ dependencies = [
  "csv 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "process_path 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_core 0.28.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_ec2 0.28.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "trust-dns 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -8,8 +8,9 @@ extern crate rusoto_core;
 extern crate rusoto_ec2;
 extern crate trust_dns;
 extern crate csv;
-extern crate clap;
+extern crate clap;  
 extern crate process_path;
+extern crate regex;
 
 /* === MODs === */
 
@@ -43,6 +44,7 @@ use trust_dns::udp::UdpClientConnection;
 use trust_dns::op::Message;
 use trust_dns::rr::{DNSClass, Name, RData, RecordType};
 use clap::{App, Arg};
+use regex::Regex;
 
 /* === CONSTANTS === */
 
@@ -182,6 +184,9 @@ fn main() {
 
 /// Bulk of the execution
 fn run() -> Result<()> {
+    let valid_total_ip_reg = Regex::new(r"^[0-9]+.[0-9]+.[0-9]+.[0-9]+/[0-9]{1,2}$").unwrap();
+    let valid_ip_reg = Regex::new(r"^[0-9]+.[0-9]+.[0-9]+.[0-9]+$").unwrap();
+
     // Init command line arguments
     let matches = App::new("aws-sg-util")
         .version("1.0")
@@ -200,6 +205,12 @@ fn run() -> Result<()> {
                 .help("Set specific security group")
         )
         .arg(
+            Arg::with_name("ip")
+                .long("ip")
+                .value_name("IP_ADDRESS")
+                .help("Set specific ip address")
+        )
+        .arg(
             Arg::with_name("add")
                 .short("a")
                 .long("add")
@@ -215,6 +226,7 @@ fn run() -> Result<()> {
         )
         .get_matches();
 
+    
     // Init EC2 client for AWS requests
     let client = Ec2Client::new(
         default_tls_client()?,
@@ -314,6 +326,7 @@ fn run() -> Result<()> {
 
         let add_security_group = matches.value_of("security-group").unwrap();
         let add_service = matches.value_of("add").unwrap().to_string();
+        // let all_services: HashMap<String, Vec<Port>> = get_rules()?;
         let all_services: HashMap<String, Vec<Port>> = match get_rules() {
             Ok(res) => res,
             Err(err) => bail!("Error obtaining services from csv file: {}", err)
@@ -323,14 +336,30 @@ fn run() -> Result<()> {
             Some(add_ports) => add_ports,
             _ => bail!("Service ports defitions were not found")
         };
-        let external_ip = get_external_ip()?;
+
+        // Finalize IP
+        let mut use_ip;
+        if matches.is_present("ip") {
+            use_ip = matches.value_of("ip").unwrap().to_owned();
+        }
+        else {
+            use_ip = get_external_ip()?;
+        }
+
+        // Add prefix if needed
+        if valid_ip_reg.is_match(&use_ip) {
+            use_ip.push_str("/32");
+        }
+        if !valid_total_ip_reg.is_match(&use_ip) {
+            bail!("Invalid IP address")
+        }
 
         for port in add_ports.into_iter() {
             let set_protocol = port.protocol.clone();
             let set_port = port.port;
             client
                 .authorize_security_group_ingress(&AuthorizeSecurityGroupIngressRequest {
-                    cidr_ip: Some(external_ip.clone() + "/32"),
+                    cidr_ip: Some(use_ip.to_owned()),
                     group_id: Some(add_security_group.to_string()),
                     from_port: Some(set_port),
                     to_port: Some(set_port),
@@ -368,14 +397,30 @@ fn run() -> Result<()> {
             Some(remove_ports) => remove_ports,
             _ => bail!("Service ports defitions were not found")
         };
-        let external_ip = get_external_ip()?;
+        
+        let mut use_ip;
+        if matches.is_present("ip") {
+            use_ip = matches.value_of("ip").unwrap().to_owned();
+        }
+        else {
+            use_ip = get_external_ip()?;
+        }
+
+        // Add prefix if needed
+        if valid_ip_reg.is_match(&use_ip) {
+            use_ip.push_str("/32");
+        }
+        if !valid_total_ip_reg.is_match(&use_ip) {
+            bail!("Invalid IP address")
+        }
 
         for port in remove_ports.into_iter() {
             let set_protocol = port.protocol.clone();
             let set_port = port.port;
             client
                 .revoke_security_group_ingress(&RevokeSecurityGroupIngressRequest {
-                    cidr_ip: Some(external_ip.clone() + "/32"),
+                    cidr_ip: Some(use_ip.to_owned()),
+                    // cidr_ip: Some(String::from(test_ip)),
                     group_id: Some(remove_security_group.to_string()),
                     from_port: Some(set_port),
                     to_port: Some(set_port),
