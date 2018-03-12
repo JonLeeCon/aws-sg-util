@@ -96,69 +96,105 @@ impl fmt::Display for PUserIdGroupPair {
 
 /* === FUNCTIONS ===*/
 
+/// Get service to port + protocol mapping from config file
+fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
+    let mut get_exec_path = get_executable_path().unwrap();
+    get_exec_path.pop();
+    get_exec_path.push(FILE_NAME);
+
+    let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
+    let mut rdr = csv::Reader::from_file(get_exec_path)?;
+    for record in rdr.decode() {
+        let (name, protocol, port): (String, String, i64) = record?;
+        let entry_vector = rules.entry(name).or_insert(Vec::new());
+        entry_vector.push(Port::new(protocol, port));
+    }
+    Ok(rules)
+}
+
+/// Make DNS request to opendns for current external ip
+fn get_external_ip () -> Result<String> {
+    let name = Name::from_str("myip.opendns.com.").unwrap();
+    let client = SyncClient::new(
+        UdpClientConnection::new(OPEN_DNS_ADDRESS.parse().unwrap()).unwrap(),
+    );
+    let response: Message = client.query(&name, DNSClass::IN, RecordType::A).unwrap();
+
+    if let &RData::A(ref ip) = response.answers()[0].rdata() {
+        let mut final_str = "".to_owned();
+        let mut octet_number = 1;
+        for i in &ip.octets() {
+            final_str.push_str(&i.to_string());
+            if octet_number != 4 {
+                final_str.push_str(".");
+            }
+            octet_number = octet_number + 1;
+        }
+        return Ok(final_str);
+    }
+    bail!("Unable to get external ip from dns request")
+}
+
+/// Prints a ip_permission rule
+fn print_ip_rule(rule: IpPermission) {
+    let ip_protocol = rule.ip_protocol.unwrap();
+    if ip_protocol == "-1" {
+        print!("tcp/udp *");
+    } else {
+        print!("{} ", ip_protocol);
+
+        if let Some(from_port) = rule.from_port { print!("{}", from_port) };
+        print!("->");
+        if let Some(to_port) = rule.to_port { print!("{}", to_port) };
+    }
+    println!();
+
+    if let Some(ranges) = rule.ip_ranges {
+        for cidr_ip in ranges.into_iter()
+            .filter(|range| range.cidr_ip.is_some())
+            .map(|range| range.cidr_ip.unwrap())
+            .collect::<Vec<String>>()
+        {
+            println!("\t{}", cidr_ip);
+        }
+    }
+    if let Some(groups_pairs) = rule.user_id_group_pairs {
+        for group in groups_pairs {
+            println!("\t{}", PUserIdGroupPair(group));
+        }
+    };
+    println!();
+}
+
 /// Prints a security-group for a list view format
 fn print_security_group_list(sg: SecurityGroup) {
-    if let Some(id) = sg.group_id {
-        print!("{}\t", id)
-    };
-    if let Some(name) = sg.group_name {
-        print!("{}\t", name)
-    };
+    if let Some(id) = sg.group_id { print!("{}", id) };
+    if let Some(name) = sg.group_name { print!("\t{}", name) };
     println!("");
 }
 
 /// Prints a security-group for a detailed view format
 fn print_security_group_detail(sg: SecurityGroup) {
-    if let Some(id) = sg.group_id {
-        print!("{}", id)
-    };
-    if let Some(name) = sg.group_name {
-        println!("-{}", name)
-    };
-    if let Some(description) = sg.description {
-        println!("{}", description)
-    };
+    if let Some(id) = sg.group_id { print!("{}", id) };
+    if let Some(name) = sg.group_name { println!("-{}", name) };
+    if let Some(description) = sg.description { println!("{}", description) };
     println!("");
-    let print_ip = |ip_input: Option<Vec<IpPermission>>| if let Some(ip_permissions) = ip_input {
-        for rule in ip_permissions {
-            let ip_protocol = rule.ip_protocol.unwrap();
-            if ip_protocol == "-1" {
-                print!("tcp/udp *");
-            } else {
-                print!("{} ", ip_protocol);
-
-                if let Some(from_port) = rule.from_port {
-                    print!("{}", from_port)
-                };
-                print!("->");
-                if let Some(to_port) = rule.to_port {
-                    print!("{}", to_port)
-                };
-            }
-            println!();
-            if let Some(ip_ranges) = rule.ip_ranges {
-                for range in ip_ranges {
-                    if let Some(cidr_ip) = range.cidr_ip {
-                        println!("\t{}", cidr_ip)
-                    };
-                }
-            }
-            if let Some(groups_pairs) = rule.user_id_group_pairs {
-                for group in groups_pairs {
-                    println!("\t{}", PUserIdGroupPair(group));
-                }
-            };
-            println!();
-        }
-    };
 
     println!("Ingress Rules");
     println!("--------------------");
-    print_ip(sg.ip_permissions);
+    if let Some(ip_permissions) = sg.ip_permissions {
+        for ip_permission in ip_permissions {
+            print_ip_rule(ip_permission);
+        }
+    }
 
     println!("Egress Rules");
     println!("--------------------");
-    print_ip(sg.ip_permissions_egress);
+    if let Some(ip_permissions) = sg.ip_permissions_egress {
+        for ip_permission in ip_permissions {
+            print_ip_rule(ip_permission);
+        }
+    }
 }
 
 /// Main function for error handling
@@ -233,46 +269,6 @@ fn run() -> Result<()> {
         DefaultCredentialsProvider::new()?,
         Region::UsWest2,
     );
-
-    // Get service to port + protocol mapping from config file
-    let get_rules = || -> Result<(HashMap<String, Vec<Port>>)> {
-        let mut get_exec_path = get_executable_path().unwrap();
-        get_exec_path.pop();
-        get_exec_path.push(FILE_NAME);
-
-        let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
-        let mut rdr = csv::Reader::from_file(get_exec_path)?;
-        for record in rdr.decode() {
-            let (name, protocol, port): (String, String, i64) = record?;
-            let entry_vector = rules.entry(name).or_insert(Vec::new());
-            entry_vector.push(Port::new(protocol, port));
-        }
-        Ok(rules)
-    };
-
-    // Make DNS request to opendns for current external ip
-    let get_external_ip = || {
-        let name = Name::from_str("myip.opendns.com.").unwrap();
-        let client = SyncClient::new(
-            UdpClientConnection::new(OPEN_DNS_ADDRESS.parse().unwrap()).unwrap(),
-        );
-        let response: Message = client.query(&name, DNSClass::IN, RecordType::A).unwrap();
-
-        if let &RData::A(ref ip) = response.answers()[0].rdata() {
-            let mut final_str = "".to_owned();
-            let mut octet_number = 1;
-            for i in &ip.octets() {
-                final_str.push_str(&i.to_string());
-                if octet_number != 4 {
-                    final_str.push_str(".");
-                }
-                octet_number = octet_number + 1;
-            }
-            Ok(final_str)
-        } else {
-            Err("Unable to get external ip from dns request")
-        }
-    };
 
     // Closure to print security groups
     let print_securitygroups = || {
