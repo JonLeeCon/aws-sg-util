@@ -176,7 +176,7 @@ fn print_security_group_list(sg: SecurityGroup) {
 /// Prints a security-group for a detailed view format
 fn print_security_group_detail(sg: SecurityGroup) {
     if let Some(id) = sg.group_id { print!("{}", id) };
-    if let Some(name) = sg.group_name { println!("-{}", name) };
+    if let Some(name) = sg.group_name { println!("\t{}", name) };
     if let Some(description) = sg.description { println!("{}", description) };
     println!("");
 
