@@ -322,16 +322,19 @@ fn run() -> Result<()> {
 
         let add_security_group = matches.value_of("security-group").unwrap();
         let add_service = matches.value_of("add").unwrap().to_string();
-        // let all_services: HashMap<String, Vec<Port>> = get_rules()?;
-        let all_services: HashMap<String, Vec<Port>> = match get_rules() {
-            Ok(res) => res,
-            Err(err) => bail!("Error obtaining services from csv file: {}", err)
-        };
 
-        let add_ports = match all_services.get(&add_service) {
-            Some(add_ports) => add_ports,
-            _ => bail!("Service ports defitions were not found")
-        };
+        let all_services: HashMap<String, Vec<Port>>;
+        let ports: Vec<Port>;
+        let add_ports: &Vec<Port>;
+
+        if let Ok(user_defined_port) = add_service.parse::<i64>() {
+            ports = vec![Port::new("tcp".to_string(), user_defined_port)];
+            add_ports = &ports;
+        }
+        else {
+            all_services = get_rules()?;
+            add_ports = all_services.get(&add_service).expect("Service not specificed in configuration file");
+        }
 
         // Finalize IP
         let mut use_ip;
@@ -384,15 +387,19 @@ fn run() -> Result<()> {
 
         let remove_security_group = matches.value_of("security-group").unwrap();
         let remove_service = matches.value_of("remove").unwrap().to_string();
-        let all_services: HashMap<String, Vec<Port>> = match get_rules() {
-            Ok(res) => res,
-            Err(err) => bail!("Error obtaining services from csv file: {}", err)
-        };
 
-        let remove_ports = match all_services.get(&remove_service) {
-            Some(remove_ports) => remove_ports,
-            _ => bail!("Service ports defitions were not found")
-        };
+        let all_services: HashMap<String, Vec<Port>>;
+        let ports: Vec<Port>;
+        let remove_ports: &Vec<Port>;
+
+        if let Ok(user_defined_port) = remove_service.parse::<i64>() {
+            ports = vec![Port::new("tcp".to_string(), user_defined_port)];
+            remove_ports = &ports;
+        }
+        else {
+            all_services = get_rules()?;
+            remove_ports = all_services.get(&remove_service).expect("Service not specificed in configuration file");
+        }
         
         let mut use_ip;
         if matches.is_present("ip") {
