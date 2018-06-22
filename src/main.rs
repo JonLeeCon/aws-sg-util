@@ -251,14 +251,14 @@ fn run() -> Result<()> {
                 .short("a")
                 .long("add")
                 .value_name("DEFINED_SERVICE")
-                .help("Add service")
+                .help("Add service/port (number)")
         )
         .arg(
             Arg::with_name("remove")
                 .short("r")
                 .long("remove")
                 .value_name("DEFINED_SERVICE")
-                .help("Remove service")
+                .help("Remove service/port (number)")
         )
         .get_matches();
 

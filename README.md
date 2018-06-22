@@ -12,9 +12,9 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -a, --add <DEFINED_SERVICE>       Add service
+    -a, --add <DEFINED_SERVICE>       Add service/port (number)
         --ip <IP_ADDRESS>             Set specific ip address
-    -r, --remove <DEFINED_SERVICE>    Remove service
+    -r, --remove <DEFINED_SERVICE>    Remove service/port (number)
         --sg <SECURITY_GROUP>         Set specific security group
 ```
 ## Getting Started
