@@ -1,9 +1,6 @@
-#![recursion_limit = "1024"]
-
 /* === CRATES === */
+extern crate failure;
 
-#[macro_use]
-extern crate error_chain;
 extern crate rusoto_core;
 extern crate rusoto_ec2;
 extern crate trust_dns;
@@ -14,27 +11,31 @@ extern crate regex;
 
 /* === MODs === */
 
-mod errors {
-    error_chain! {
-        foreign_links {
-            Io(::std::io::Error);
-            TlsError(::rusoto_core::TlsError);
-            CredentialError(::rusoto_core::CredentialsError);
-            CSVError(::csv::Error);
-            AuthorizeSecurityGroupIngressError(::rusoto_ec2::AuthorizeSecurityGroupIngressError);
-            RevokeSecurityGroupIngressError(::rusoto_ec2::RevokeSecurityGroupIngressError);
-            DescribeSecurityGroupsError(::rusoto_ec2::DescribeSecurityGroupsError);
-        }
-    }
-}
+pub mod errors;
+
+// mod errors {
+//     error_chain! {
+//         foreign_links {
+//             Io(::std::io::Error);
+//             TlsError(::rusoto_core::TlsError);
+//             CredentialError(::rusoto_core::CredentialsError);
+//             CSVError(::csv::Error);
+//             AuthorizeSecurityGroupIngressError(::rusoto_ec2::AuthorizeSecurityGroupIngressError);
+//             RevokeSecurityGroupIngressError(::rusoto_ec2::RevokeSecurityGroupIngressError);
+//             DescribeSecurityGroupsError(::rusoto_ec2::DescribeSecurityGroupsError);
+//         }
+//     }
+// }
 
 /* === USE === */
 
+use std::result;
+// use failure::Error;
+use errors::{Error};
 use process_path::get_executable_path;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
-use errors::*;
 use rusoto_core::{DefaultCredentialsProvider, Region, default_tls_client};
 use rusoto_ec2::{Ec2Client, Ec2, DescribeSecurityGroupsRequest,
                  AuthorizeSecurityGroupIngressRequest, RevokeSecurityGroupIngressRequest,
@@ -45,6 +46,9 @@ use trust_dns::op::Message;
 use trust_dns::rr::{DNSClass, Name, RData, RecordType};
 use clap::{App, Arg};
 use regex::Regex;
+
+/* === TYPES === */
+type Result<T> = result::Result<T, failure::Error>;
 
 /* === CONSTANTS === */
 
@@ -96,6 +100,17 @@ impl fmt::Display for PUserIdGroupPair {
 
 /* === FUNCTIONS ===*/
 
+fn print_error(err: &failure::Error) -> String {
+    let mut pretty = err.to_string();
+    let mut prev = err.cause();
+    while let Some(next) = prev.cause() {
+        pretty.push_str(": ");
+        pretty.push_str(&next.to_string());
+        prev = next;
+    }
+    pretty
+}
+
 /// Get service to port + protocol mapping from config file
 fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
     let mut get_exec_path = get_executable_path().unwrap();
@@ -103,7 +118,7 @@ fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
     get_exec_path.push(FILE_NAME);
 
     let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
-    let mut rdr = csv::Reader::from_file(get_exec_path)?;
+    let mut rdr = csv::Reader::from_file(get_exec_path).map_err(Error::config)?;
     for record in rdr.decode() {
         let (name, protocol, port): (String, String, i64) = record?;
         let entry_vector = rules.entry(name).or_insert(Vec::new());
@@ -132,7 +147,7 @@ fn get_external_ip () -> Result<String> {
         }
         return Ok(final_str);
     }
-    bail!("Unable to get external ip from dns request")
+    Err(Error::obtain_ip())?
 }
 
 /// Prints a ip_permission rule
@@ -199,19 +214,17 @@ fn print_security_group_detail(sg: SecurityGroup) {
 
 /// Main function for error handling
 fn main() {
-    if let Err(ref e) = run() {
+    if let Err(e) = run() {
         use std::io::Write;
         let stderr = &mut ::std::io::stderr();
         let errmsg = "Error writing to stderr";
 
-        writeln!(stderr, "error: {}", e).expect(errmsg);
 
-        for e in e.iter().skip(1) {
-            writeln!(stderr, "caused by: {}", e).expect(errmsg);
-        }
+        writeln!(stderr, "error: {}", print_error(&e)).expect(errmsg);
 
-        if let Some(backtrace) = e.backtrace() {
-            writeln!(stderr, "backtrace: {:?}", backtrace).expect(errmsg);
+        let backtrace = e.backtrace().to_string();
+        if !backtrace.trim().is_empty() {
+            writeln!(stderr, "backtrace: {}", backtrace).expect(errmsg);
         }
 
         ::std::process::exit(1);
@@ -309,15 +322,15 @@ fn run() -> Result<()> {
     else if matches.is_present("add") {
         // Missing add argument
         if !matches.is_present("add") {
-            bail!("Missing required pre-defined service to add");
+            Err(Error::missing_arg("add"))?
         }
         // Missing sg
         if !matches.is_present("security-group") {
-            bail!("Missing required security-group when adding rule");
+            Err(Error::missing_arg("security-group"))?
         }
         // Remove with add
         if matches.is_present("remove") {
-            bail!("Cannot add and remove together");
+            Err(Error::incorrect_args("add and remove both provided"))?
         }
 
         let add_security_group = matches.value_of("security-group").unwrap();
@@ -350,7 +363,7 @@ fn run() -> Result<()> {
             use_ip.push_str("/32");
         }
         if !valid_total_ip_reg.is_match(&use_ip) {
-            bail!("Invalid IP address")
+            Err(Error::invalid_ip())?
         }
 
         for port in add_ports.into_iter() {
@@ -364,8 +377,7 @@ fn run() -> Result<()> {
                     to_port: Some(set_port),
                     ip_protocol: Some(set_protocol),
                     ..Default::default()
-                })
-                .chain_err(|| { "Could not add port" })?;
+                })?;
         }
         println!(
             "Added service:{:?} to security-group:{:?} successfully",
@@ -378,11 +390,11 @@ fn run() -> Result<()> {
     else if matches.is_present("remove") {
         // Missing add argument
         if !matches.is_present("remove") {
-            bail!("Missing required pre-defined service to remove");
+            Err(Error::missing_arg("remove"))?
         }
         // Missing sg
         if !matches.is_present("security-group") {
-            bail!("Missing required security-group when removing rule");
+            Err(Error::missing_arg("security-group"))?
         }
 
         let remove_security_group = matches.value_of("security-group").unwrap();
@@ -414,7 +426,7 @@ fn run() -> Result<()> {
             use_ip.push_str("/32");
         }
         if !valid_total_ip_reg.is_match(&use_ip) {
-            bail!("Invalid IP address")
+            Err(Error::invalid_ip())?
         }
 
         for port in remove_ports.into_iter() {
@@ -429,8 +441,7 @@ fn run() -> Result<()> {
                     to_port: Some(set_port),
                     ip_protocol: Some(set_protocol),
                     ..Default::default()
-                })
-                .chain_err(|| { "Could not remove port" })?;;
+                })?;
         }
         println!(
             "Removed service:{:?} to security-group:{:?} successfully",
