@@ -5,8 +5,8 @@ authors = ["Jonathan Constantinides <jonleecon@gmail.com>"]
 
 [dependencies]
 clap = "2.31.2"
-rusoto_core = "0.28.0"
-rusoto_ec2 = "0.28.0"
+rusoto_core = "0.32.0"
+rusoto_ec2 = "0.32.0"
 failure = "0.1.1"
 csv = "1"
 trust-dns = "0.14.0"

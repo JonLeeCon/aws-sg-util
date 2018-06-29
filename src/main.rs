@@ -28,7 +28,7 @@ use clap::{App, Arg};
 use errors::Error;
 use process_path::get_executable_path;
 use regex::Regex;
-use rusoto_core::{default_tls_client, DefaultCredentialsProvider, Region};
+use rusoto_core::Region;
 use rusoto_ec2::{
     AuthorizeSecurityGroupIngressRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client,
     IpPermission, RevokeSecurityGroupIngressRequest, SecurityGroup,
@@ -263,16 +263,13 @@ fn run() -> Result<()> {
         .get_matches();
 
     // Init EC2 client for AWS requests
-    let client = Ec2Client::new(
-        default_tls_client()?,
-        DefaultCredentialsProvider::new()?,
-        Region::UsWest2,
-    );
+    let client = Ec2Client::simple(Region::UsWest2);
 
     // Closure to print security groups
     let print_securitygroups = || {
         let output = client
             .describe_security_groups(&Default::default())
+            .sync()
             .unwrap();
 
         if let Some(security_groups) = output.security_groups {
@@ -294,7 +291,8 @@ fn run() -> Result<()> {
             };
 
             let security_groups = client
-                .describe_security_groups(&describe_security_group_request)?
+                .describe_security_groups(&describe_security_group_request)
+                .sync()?
                 .security_groups
                 .unwrap();
 
@@ -355,14 +353,16 @@ fn run() -> Result<()> {
         for port in add_ports.into_iter() {
             let set_protocol = port.protocol.clone();
             let set_port = port.port;
-            client.authorize_security_group_ingress(&AuthorizeSecurityGroupIngressRequest {
-                cidr_ip: Some(use_ip.to_owned()),
-                group_id: Some(add_security_group.to_string()),
-                from_port: Some(set_port),
-                to_port: Some(set_port),
-                ip_protocol: Some(set_protocol),
-                ..Default::default()
-            })?;
+            client
+                .authorize_security_group_ingress(&AuthorizeSecurityGroupIngressRequest {
+                    cidr_ip: Some(use_ip.to_owned()),
+                    group_id: Some(add_security_group.to_string()),
+                    from_port: Some(set_port),
+                    to_port: Some(set_port),
+                    ip_protocol: Some(set_protocol),
+                    ..Default::default()
+                })
+                .sync()?;
         }
         println!(
             "Added service:{:?} to security-group:{:?} successfully",
@@ -414,14 +414,16 @@ fn run() -> Result<()> {
         for port in remove_ports.into_iter() {
             let set_protocol = port.protocol.clone();
             let set_port = port.port;
-            client.revoke_security_group_ingress(&RevokeSecurityGroupIngressRequest {
-                cidr_ip: Some(use_ip.to_owned()),
-                group_id: Some(remove_security_group.to_string()),
-                from_port: Some(set_port),
-                to_port: Some(set_port),
-                ip_protocol: Some(set_protocol),
-                ..Default::default()
-            })?;
+            client
+                .revoke_security_group_ingress(&RevokeSecurityGroupIngressRequest {
+                    cidr_ip: Some(use_ip.to_owned()),
+                    group_id: Some(remove_security_group.to_string()),
+                    from_port: Some(set_port),
+                    to_port: Some(set_port),
+                    ip_protocol: Some(set_protocol),
+                    ..Default::default()
+                })
+                .sync()?;
         }
         println!(
             "Removed service:{:?} to security-group:{:?} successfully",
