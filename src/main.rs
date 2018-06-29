@@ -43,6 +43,7 @@ use trust_dns::udp::UdpClientConnection;
 
 /* === TYPES === */
 type Result<T> = result::Result<T, failure::Error>;
+type CsvRecord = (String, String, i64);
 
 /* === CONSTANTS === */
 
@@ -85,9 +86,10 @@ fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
     get_exec_path.push(FILE_NAME);
 
     let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
-    let mut rdr = csv::Reader::from_file(get_exec_path).map_err(Error::config)?;
-    for record in rdr.decode() {
-        let (name, protocol, port): (String, String, i64) = record?;
+    let mut rdr = csv::Reader::from_path(get_exec_path).map_err(Error::config)?;
+
+    for record in rdr.deserialize() {
+        let (name, protocol, port): CsvRecord = record?;
         let entry_vector = rules.entry(name).or_insert_with(Vec::new);
         entry_vector.push(Port::new(protocol, port));
     }
