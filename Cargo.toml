@@ -9,7 +9,7 @@ rusoto_core = "0.28.0"
 rusoto_ec2 = "0.28.0"
 failure = "0.1.1"
 csv = "1"
-trust-dns = "0.11.3"
+trust-dns = "0.14.0"
 process_path = "0.1"
 regex = "1.0.0"
 

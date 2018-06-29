@@ -37,7 +37,6 @@ use std::collections::HashMap;
 // use std::fmt;
 use std::str::FromStr;
 use trust_dns::client::{Client, SyncClient};
-use trust_dns::op::Message;
 use trust_dns::rr::{DNSClass, Name, RData, RecordType};
 use trust_dns::udp::UdpClientConnection;
 
@@ -101,7 +100,7 @@ fn get_external_ip() -> Result<String> {
     let name = Name::from_str("myip.opendns.com.").unwrap();
     let client =
         SyncClient::new(UdpClientConnection::new(OPEN_DNS_ADDRESS.parse().unwrap()).unwrap());
-    let response: Message = client.query(&name, DNSClass::IN, RecordType::A).unwrap();
+    let response = client.query(&name, DNSClass::IN, RecordType::A).unwrap();
 
     if let RData::A(ref ip) = *response.answers()[0].rdata() {
         let mut final_str = "".to_owned();
