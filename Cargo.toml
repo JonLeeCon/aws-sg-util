@@ -4,14 +4,14 @@ version = "0.1.0"
 authors = ["Jonathan Constantinides <jonleecon@gmail.com>"]
 
 [dependencies]
-clap = "2.26.2"
+clap = "2.31.2"
 rusoto_core = "0.28.0"
 rusoto_ec2 = "0.28.0"
 failure = "0.1.1"
 csv = "0.15.0"
 trust-dns = "0.11.3"
 process_path = "0.1"
-regex = "0.2.2"
+regex = "1.0.0"
 
 [profile.release]
 lto = true
