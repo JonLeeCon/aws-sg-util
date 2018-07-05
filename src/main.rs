@@ -10,7 +10,6 @@ extern crate failure;
 
 extern crate clap;
 extern crate csv;
-extern crate process_path;
 extern crate regex;
 extern crate rusoto_core;
 extern crate rusoto_ec2;
@@ -23,10 +22,9 @@ pub mod errors;
 /* === USE === */
 
 use std::result;
-// use failure::Error;
+// use failure::ResultExt;
 use clap::{App, Arg};
 use errors::Error;
-use process_path::get_executable_path;
 use regex::Regex;
 use rusoto_core::Region;
 use rusoto_ec2::{
@@ -34,6 +32,7 @@ use rusoto_ec2::{
     IpPermission, RevokeSecurityGroupIngressRequest, SecurityGroup,
 };
 use std::collections::HashMap;
+use std::env::current_exe;
 // use std::fmt;
 use std::str::FromStr;
 use trust_dns::client::{Client, SyncClient};
@@ -80,12 +79,13 @@ fn print_error(err: &failure::Error) -> String {
 
 /// Get service to port + protocol mapping from config file
 fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
-    let mut get_exec_path = get_executable_path().unwrap();
-    get_exec_path.pop();
-    get_exec_path.push(FILE_NAME);
+    let mut file_path = current_exe()?;
+    file_path.pop();
+    file_path.push(FILE_NAME);
+
+    let mut rdr = csv::Reader::from_path(file_path).map_err(|err| Error::config(err.to_string()))?;
 
     let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
-    let mut rdr = csv::Reader::from_path(get_exec_path).map_err(Error::config)?;
 
     for record in rdr.deserialize() {
         let (name, protocol, port): CsvRecord = record?;
@@ -98,8 +98,7 @@ fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
 /// Make DNS request to opendns for current external ip
 fn get_external_ip() -> Result<String> {
     let name = Name::from_str("myip.opendns.com.").unwrap();
-    let client =
-        SyncClient::new(UdpClientConnection::new(OPEN_DNS_ADDRESS.parse().unwrap()).unwrap());
+    let client = SyncClient::new(UdpClientConnection::new(OPEN_DNS_ADDRESS.parse()?).unwrap());
     let response = client.query(&name, DNSClass::IN, RecordType::A).unwrap();
 
     if let RData::A(ref ip) = *response.answers()[0].rdata() {
@@ -330,6 +329,7 @@ fn run() -> Result<()> {
             add_ports = &ports;
         } else {
             all_services = get_rules()?;
+            // all_services = get_rules().expect("Could not get rules from configuration file");
             add_ports = all_services
                 .get(&add_service)
                 .expect("Service not specificed in configuration file");

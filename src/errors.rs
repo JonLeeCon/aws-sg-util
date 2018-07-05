@@ -1,7 +1,6 @@
 use failure::{Backtrace, Context, Fail};
 use std::result;
 use std::fmt;
-use csv;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -26,8 +25,8 @@ impl Error {
     pub fn invalid_ip() -> Error {
         Error::from(ErrorKind::InvalidIpFormatError)
     }
-    pub fn config(err: csv::Error) -> Error {
-        Error::from(ErrorKind::ConfigError(err.to_string()))
+    pub fn config<T: AsRef<str>>(msg: T) -> Error {
+        Error::from(ErrorKind::ConfigError(msg.as_ref().to_string()))
     }
 }
 
