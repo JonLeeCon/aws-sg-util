@@ -44,12 +44,10 @@ type Result<T> = result::Result<T, failure::Error>;
 type CsvRecord = (String, String, i64);
 
 /* === CONSTANTS === */
-
 const OPEN_DNS_ADDRESS: &str = "208.67.222.222:53";
 const FILE_NAME: &str = "config/ports.csv";
 
 /* === STRUCTS === */
-
 /// Struct containing port number and protocol
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct Port {
@@ -57,7 +55,6 @@ struct Port {
     port: i64,
 }
 /* === IMPLEMENTS === */
-
 impl Port {
     fn new(protocol: String, port: i64) -> Port {
         Port { protocol, port }
@@ -65,7 +62,6 @@ impl Port {
 }
 
 /* === FUNCTIONS ===*/
-
 fn print_error(err: &failure::Error) -> String {
     let mut pretty = err.to_string();
     let mut prev = err.cause();
@@ -84,7 +80,6 @@ fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
     file_path.push(FILE_NAME);
 
     let mut rdr = csv::Reader::from_path(file_path).map_err(|err| Error::config(err.to_string()))?;
-
     let mut rules: HashMap<String, Vec<Port>> = HashMap::new();
 
     for record in rdr.deserialize() {
@@ -281,7 +276,6 @@ fn run() -> Result<()> {
         }
     };
 
-    // List
     if matches.is_present("list") {
         if let Some(sg) = matches.value_of("security-group") {
             let describe_security_group_request = DescribeSecurityGroupsRequest {
@@ -301,37 +295,31 @@ fn run() -> Result<()> {
         } else {
             print_securitygroups();
         }
-    }
-    // Add
-    else if matches.is_present("add") {
-        // Missing add argument
-        if !matches.is_present("add") {
-            Err(Error::missing_arg("add"))?
-        }
-        // Missing sg
+    } else if matches.is_present("add") && matches.is_present("remove") {
+        Err(Error::incorrect_args("add and remove both provided"))?
+    } else if matches.is_present("add") || matches.is_present("remove") {
+        let add_option = matches.is_present("add");
         if !matches.is_present("security-group") {
             Err(Error::missing_arg("security-group"))?
         }
-        // Remove with add
-        if matches.is_present("remove") {
-            Err(Error::incorrect_args("add and remove both provided"))?
-        }
-
-        let add_security_group = matches.value_of("security-group").unwrap();
-        let add_service = matches.value_of("add").unwrap().to_string();
-
-        let all_services: HashMap<String, Vec<Port>>;
-        let ports: Vec<Port>;
-        let add_ports: &Vec<Port>;
-
-        if let Ok(user_defined_port) = add_service.parse::<i64>() {
-            ports = vec![Port::new("tcp".to_string(), user_defined_port)];
-            add_ports = &ports;
+        let security_group = matches.value_of("security-group").unwrap();
+        let service = if add_option {
+            matches.value_of("add").unwrap()
         } else {
-            all_services = get_rules()?;
-            // all_services = get_rules().expect("Could not get rules from configuration file");
-            add_ports = all_services
-                .get(&add_service)
+            matches.value_of("remove").unwrap()
+        };
+
+        let services: HashMap<String, Vec<Port>>;
+        let set_port;
+        let ports; //: Vec<Port>;
+
+        if let Ok(user_defined_port) = service.parse::<i64>() {
+            set_port = vec![Port::new("tcp".to_string(), user_defined_port)];
+            ports = &set_port;
+        } else {
+            services = get_rules()?;
+            ports = services
+                .get(service)
                 .expect("Service not specificed in configuration file");
         }
 
@@ -350,84 +338,38 @@ fn run() -> Result<()> {
             Err(Error::invalid_ip())?
         }
 
-        for port in add_ports.into_iter() {
+        for port in ports.into_iter() {
             let set_protocol = port.protocol.clone();
             let set_port = port.port;
-            client
-                .authorize_security_group_ingress(&AuthorizeSecurityGroupIngressRequest {
-                    cidr_ip: Some(use_ip.to_owned()),
-                    group_id: Some(add_security_group.to_string()),
-                    from_port: Some(set_port),
-                    to_port: Some(set_port),
-                    ip_protocol: Some(set_protocol),
-                    ..Default::default()
-                })
-                .sync()?;
+            if add_option {
+                client
+                    .authorize_security_group_ingress(&AuthorizeSecurityGroupIngressRequest {
+                        cidr_ip: Some(use_ip.to_owned()),
+                        group_id: Some(security_group.to_string()),
+                        from_port: Some(set_port),
+                        to_port: Some(set_port),
+                        ip_protocol: Some(set_protocol),
+                        ..Default::default()
+                    })
+                    .sync()?;
+            } else {
+                client
+                    .revoke_security_group_ingress(&RevokeSecurityGroupIngressRequest {
+                        cidr_ip: Some(use_ip.to_owned()),
+                        group_id: Some(security_group.to_string()),
+                        from_port: Some(set_port),
+                        to_port: Some(set_port),
+                        ip_protocol: Some(set_protocol),
+                        ..Default::default()
+                    })
+                    .sync()?;
+            }
         }
         println!(
-            "Added service:{:?} to security-group:{:?} successfully",
-            add_service, add_security_group
-        );
-    }
-    // Remove
-    else if matches.is_present("remove") {
-        // Missing add argument
-        if !matches.is_present("remove") {
-            Err(Error::missing_arg("remove"))?
-        }
-        // Missing sg
-        if !matches.is_present("security-group") {
-            Err(Error::missing_arg("security-group"))?
-        }
-
-        let remove_security_group = matches.value_of("security-group").unwrap();
-        let remove_service = matches.value_of("remove").unwrap().to_string();
-
-        let all_services: HashMap<String, Vec<Port>>;
-        let ports: Vec<Port>;
-        let remove_ports: &Vec<Port>;
-
-        if let Ok(user_defined_port) = remove_service.parse::<i64>() {
-            ports = vec![Port::new("tcp".to_string(), user_defined_port)];
-            remove_ports = &ports;
-        } else {
-            all_services = get_rules()?;
-            remove_ports = all_services
-                .get(&remove_service)
-                .expect("Service not specificed in configuration file");
-        }
-
-        let mut use_ip = if matches.is_present("ip") {
-            matches.value_of("ip").unwrap().to_owned()
-        } else {
-            get_external_ip()?
-        };
-
-        // Add prefix if needed
-        if valid_ip_reg.is_match(&use_ip) {
-            use_ip.push_str("/32");
-        }
-        if !valid_total_ip_reg.is_match(&use_ip) {
-            Err(Error::invalid_ip())?
-        }
-
-        for port in remove_ports.into_iter() {
-            let set_protocol = port.protocol.clone();
-            let set_port = port.port;
-            client
-                .revoke_security_group_ingress(&RevokeSecurityGroupIngressRequest {
-                    cidr_ip: Some(use_ip.to_owned()),
-                    group_id: Some(remove_security_group.to_string()),
-                    from_port: Some(set_port),
-                    to_port: Some(set_port),
-                    ip_protocol: Some(set_protocol),
-                    ..Default::default()
-                })
-                .sync()?;
-        }
-        println!(
-            "Removed service:{:?} to security-group:{:?} successfully",
-            remove_service, remove_security_group
+            "{} service:{:?} to security-group:{:?} successfully",
+            if add_option { "Added" } else { "Removed" },
+            service,
+            security_group
         );
     }
 

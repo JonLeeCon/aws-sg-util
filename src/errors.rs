@@ -1,6 +1,6 @@
 use failure::{Backtrace, Context, Fail};
-use std::result;
 use std::fmt;
+use std::result;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -66,15 +66,9 @@ impl fmt::Display for ErrorKind {
             ErrorKind::IncorrectArgError(ref msg) => {
                 write!(f, "incorrect usage of arguments: '{}'", msg)
             }
-            ErrorKind::ObtainIpError => {
-                write!(f, "unable to get external ip from dns request")
-            }
-            ErrorKind::InvalidIpFormatError => {
-                write!(f, "invalid ip address format")
-            }
-            ErrorKind::ConfigError(ref msg) => {
-                write!(f, "error loading config file: '{}'", msg)
-            }
+            ErrorKind::ObtainIpError => write!(f, "unable to get external ip from dns request"),
+            ErrorKind::InvalidIpFormatError => write!(f, "invalid ip address format"),
+            ErrorKind::ConfigError(ref msg) => write!(f, "error loading config file: '{}'", msg),
             ErrorKind::__Nonexhaustive => panic!("invalid error"),
         }
     }
