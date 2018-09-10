@@ -28,7 +28,7 @@ OPTIONS:
 - Add any services(anything you want to use) and protocol(tcp/udp) + port combinations
 
 ## Authors
-Jonathan Constantinides <jonleecon@gmail.com>
+Jonathan Constantinides <jon@joncon.io>
 
 ## License
 This project is licensed under the MIT License
