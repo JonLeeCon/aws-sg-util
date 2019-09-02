@@ -143,9 +143,9 @@ fn print_ip_rule(rule: IpPermission) {
         for group in groups_pairs {
             if let Some(ref id) = group.group_id {
                 if let Some(ref name) = group.group_name {
-                    print!("{} {}", id, name)
+                    println!("\t{} {}", id, name)
                 } else {
-                    print!("{}", id)
+                    println!("\t{}", id)
                 }
             }
         }
