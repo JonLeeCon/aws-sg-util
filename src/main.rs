@@ -64,7 +64,7 @@ impl Port {
 /* === FUNCTIONS ===*/
 fn print_error(err: &failure::Error) -> String {
     let mut pretty = err.to_string();
-    let mut prev = err.cause();
+    let mut prev = err.as_fail();
     while let Some(next) = prev.cause() {
         pretty.push_str(": ");
         pretty.push_str(&next.to_string());
@@ -257,12 +257,12 @@ fn run() -> Result<()> {
         .get_matches();
 
     // Init EC2 client for AWS requests
-    let client = Ec2Client::simple(Region::UsWest2);
+    let client = Ec2Client::new(Region::UsWest2);
 
     // Closure to print security groups
     let print_securitygroups = || {
         let output = client
-            .describe_security_groups(&Default::default())
+            .describe_security_groups(Default::default())
             .sync()
             .unwrap();
 
@@ -284,7 +284,7 @@ fn run() -> Result<()> {
             };
 
             let security_groups = client
-                .describe_security_groups(&describe_security_group_request)
+                .describe_security_groups(describe_security_group_request)
                 .sync()?
                 .security_groups
                 .unwrap();
@@ -338,12 +338,12 @@ fn run() -> Result<()> {
             Err(Error::invalid_ip())?
         }
 
-        for port in ports.into_iter() {
+        for port in ports.iter() {
             let set_protocol = port.protocol.clone();
             let set_port = port.port;
             if add_option {
                 client
-                    .authorize_security_group_ingress(&AuthorizeSecurityGroupIngressRequest {
+                    .authorize_security_group_ingress(AuthorizeSecurityGroupIngressRequest {
                         cidr_ip: Some(use_ip.to_owned()),
                         group_id: Some(security_group.to_string()),
                         from_port: Some(set_port),
@@ -354,7 +354,7 @@ fn run() -> Result<()> {
                     .sync()?;
             } else {
                 client
-                    .revoke_security_group_ingress(&RevokeSecurityGroupIngressRequest {
+                    .revoke_security_group_ingress(RevokeSecurityGroupIngressRequest {
                         cidr_ip: Some(use_ip.to_owned()),
                         group_id: Some(security_group.to_string()),
                         from_port: Some(set_port),

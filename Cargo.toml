@@ -4,13 +4,13 @@ version = "0.1.0"
 authors = ["Jonathan Constantinides <jonleecon@gmail.com>"]
 
 [dependencies]
-clap = "2.31.2"
-rusoto_core = "0.32.0"
-rusoto_ec2 = "0.32.0"
-failure = "0.1.1"
-csv = "1"
-trust-dns = "0.14.0"
-regex = "1.0.0"
+clap = "2.33.0"
+rusoto_core = "0.40.0"
+rusoto_ec2 = "0.40.0"
+failure = "0.1.5"
+csv = "1.1.1"
+trust-dns = "0.17.0"
+regex = "1.2.1"
 
 [profile.release]
 lto = true
