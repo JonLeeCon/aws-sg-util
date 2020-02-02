@@ -13,7 +13,7 @@ extern crate csv;
 extern crate regex;
 extern crate rusoto_core;
 extern crate rusoto_ec2;
-extern crate trust_dns;
+extern crate trust_dns_client;
 
 /* === MODs === */
 
@@ -35,9 +35,9 @@ use std::collections::HashMap;
 use std::env::current_exe;
 // use std::fmt;
 use std::str::FromStr;
-use trust_dns::client::{Client, SyncClient};
-use trust_dns::rr::{DNSClass, Name, RData, RecordType};
-use trust_dns::udp::UdpClientConnection;
+use trust_dns_client::client::{Client, SyncClient};
+use trust_dns_client::rr::{DNSClass, Name, RData, RecordType};
+use trust_dns_client::udp::UdpClientConnection;
 
 /* === TYPES === */
 type Result<T> = result::Result<T, failure::Error>;
@@ -74,7 +74,7 @@ fn print_error(err: &failure::Error) -> String {
 }
 
 /// Get service to port + protocol mapping from config file
-fn get_rules() -> Result<(HashMap<String, Vec<Port>>)> {
+fn get_rules() -> Result<HashMap<String, Vec<Port>>> {
     let mut file_path = current_exe()?;
     file_path.pop();
     file_path.push(FILE_NAME);
@@ -108,7 +108,7 @@ fn get_external_ip() -> Result<String> {
         }
         return Ok(final_str);
     }
-    Err(Error::obtain_ip())?
+    Err(Error::obtain_ip().into())
 }
 
 /// Prints a ip_permission rule
@@ -296,11 +296,11 @@ fn run() -> Result<()> {
             print_securitygroups();
         }
     } else if matches.is_present("add") && matches.is_present("remove") {
-        Err(Error::incorrect_args("add and remove both provided"))?
+        return Err(Error::incorrect_args("add and remove both provided").into())
     } else if matches.is_present("add") || matches.is_present("remove") {
         let add_option = matches.is_present("add");
         if !matches.is_present("security-group") {
-            Err(Error::missing_arg("security-group"))?
+            return Err(Error::missing_arg("security-group").into())
         }
         let security_group = matches.value_of("security-group").unwrap();
         let service = if add_option {
@@ -335,7 +335,7 @@ fn run() -> Result<()> {
             use_ip.push_str("/32");
         }
         if !valid_total_ip_reg.is_match(&use_ip) {
-            Err(Error::invalid_ip())?
+            return Err(Error::invalid_ip().into())
         }
 
         for port in ports.iter() {
