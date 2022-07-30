@@ -1,12 +1,14 @@
 {
-  "version": "0.1.0",
+  "version": "2.0.0",
   "command": "cargo",
-  "isShellCommand": true,
   "tasks": [
     {
-      "taskName": "build",
-      "isBuildCommand": true,
-      "showOutput": "always",
+      "label": "build",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build"
+      ],
       "problemMatcher": {
         "owner": "rust",
         "fileLocation": [
@@ -23,20 +25,37 @@
           "severity": 6,
           "message": 7
         }
+      },
+      "group": {
+        "_id": "build",
+        "isDefault": false
       }
     },
     {
-      "taskName": "clean",
-      "showOutput": "always"
+      "label": "clean",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "clean"
+      ],
+      "problemMatcher": []
     },
     {
-      "taskName": "run",
-      "showOutput": "always"
+      "label": "run",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "run"
+      ],
+      "problemMatcher": []
     },
     {
-      "taskName": "test",
-      "showOutput": "always",
-      "isTestCommand": true,
+      "label": "test",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "test"
+      ],
       "problemMatcher": [
         {
           "owner": "rust",
@@ -69,7 +88,11 @@
             "line": 3
           }
         }
-      ]
+      ],
+      "group": {
+        "_id": "test",
+        "isDefault": false
+      }
     }
   ]
 }
